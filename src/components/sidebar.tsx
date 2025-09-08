@@ -28,7 +28,12 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { useAccount, useConnect } from '@particle-network/connectkit';
+import { useAccount, useDisconnect } from '@particle-network/connectkit';
+import { useWallet as useAptosWallet } from '@aptos-labs/wallet-adapter-react';
+import { AptosWalletSelector } from './AptosWalletSelector';
+import { useToast } from './ui/use-toast';
+import { ConnectButton } from "@particle-network/connectkit";
+
 
 const Sidebar = () => {
   const [activeItem, setActiveItem] = useState("Portfolio");
@@ -36,37 +41,79 @@ const Sidebar = () => {
   const router = useRouter();
   
   // Particle Network ConnectKit hooks
-  const { address, isConnected } = useAccount();
-  const { connect, data: userData } = useConnect();
+  const { address: evmAddress, isConnected: evmIsConnected } = useAccount();
+  const { disconnect: disconnectEVM } = useDisconnect();
+  
+  // Aptos wallet hooks
+  const { account: aptosAccount, connected: aptosIsConnected, disconnect: disconnectAptos } = useAptosWallet();
+  
+  // Toast notifications
+  const { toast } = useToast();
 
   // Fix hydration error by ensuring client-side rendering
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Debug logging
-  console.log("Sidebar - isConnected:", isConnected);
-  console.log("Sidebar - address:", address);
-  console.log("Sidebar - userData:", userData);
+  // Show connection status toasts
+  useEffect(() => {
+    if (mounted && evmIsConnected && evmAddress) {
+      toast({
+        title: "EVM Wallet Connected",
+        description: `Connected to ${evmAddress.slice(0, 6)}...${evmAddress.slice(-4)}`,
+        variant: "default",
+      });
+    }
+  }, [evmIsConnected, evmAddress, mounted, toast]);
 
-  // Function to get display name
-  const getDisplayName = () => {
-    console.log("getDisplayName called - isConnected:", isConnected, "address:", address);
-    
+  useEffect(() => {
+    if (mounted && aptosIsConnected && aptosAccount?.address) {
+      toast({
+        title: "Aptos Wallet Connected",
+        description: `Connected to ${aptosAccount.address.toString().slice(0, 6)}...${aptosAccount.address.toString().slice(-4)}`,
+        variant: "default",
+      });
+    }
+  }, [aptosIsConnected, aptosAccount, mounted, toast]);
+
+  // Debug logging
+  console.log("Sidebar - evmIsConnected:", evmIsConnected);
+  console.log("Sidebar - evmAddress:", evmAddress);
+  console.log("Sidebar - aptosIsConnected:", aptosIsConnected);
+  console.log("Sidebar - aptosAccount:", aptosAccount);
+
+  // Function to get EVM display name
+  const getEVMDisplayName = () => {
     if (!mounted) {
       return "Loading...";
     }
     
-    if (!isConnected) {
-      return "Connect Wallet";
+    if (!evmIsConnected) {
+      return "Connect EVM";
     }
 
-    // If wallet is connected, show truncated address
-    if (address) {
-      return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    if (evmAddress) {
+      return `${evmAddress.slice(0, 6)}...${evmAddress.slice(-4)}`;
     }
 
-    return "Connected";
+    return "EVM Connected";
+  };
+
+  // Function to get Aptos display name
+  const getAptosDisplayName = () => {
+    if (!mounted) {
+      return "Loading...";
+    }
+    
+    if (!aptosIsConnected) {
+      return "Connect Aptos";
+    }
+
+    if (aptosAccount?.address) {
+      return `${aptosAccount.address.toString().slice(0, 6)}...${aptosAccount.address.toString().slice(-4)}`;
+    }
+
+    return "Aptos Connected";
   };
 
   // Function to get user avatar
@@ -77,7 +124,8 @@ const Sidebar = () => {
   };
 
   // Don't render the disconnect button until mounted to prevent hydration mismatch
-  const shouldShowDisconnect = mounted && isConnected;
+  const shouldShowEVMDisconnect = mounted && evmIsConnected;
+  const shouldShowAptosDisconnect = mounted && aptosIsConnected;
 
   const navigationItems = [
     { name: "markets", icon: BarChart3, count: 1 },
@@ -211,37 +259,91 @@ const Sidebar = () => {
         </div>
       </div>
 
-      {/* Footer with User Profile */}
+      {/* Footer with Wallet Connections */}
       {mounted && (
-        <div className="p-3 border-t border-crypto-border">
+        <div className="p-3 border-t border-crypto-border space-y-3">
+          {/* EVM Wallet */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <div className="w-6 h-6 bg-gradient-primary rounded-full">
-                {getUserAvatar() && (
-                  <Image
-                    src={getUserAvatar()}
-                    width={24}
-                    height={24}
-                    alt="User Avatar" 
-                    className="w-6 h-6 rounded-full object-cover"
-                  />
-                )}
+              <div className="w-6 h-6 bg-gradient-primary rounded-full flex items-center justify-center">
+                <span className="text-primary-foreground font-bold text-xs">E</span>
               </div>
-              <span className="text-xs text-muted-foreground">{getDisplayName()}</span>
+              <span className="text-xs text-muted-foreground">EVM</span>
             </div>
-            {shouldShowDisconnect && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="p-1 text-red-400 hover:text-red-300"
-                onClick={() => {
-                  // Handle disconnect logic here
-                  console.log("Disconnect clicked");
-                }}
-              >
-                <LogOut className="w-4 h-4" />
-              </Button>
-            )}
+            <div className="flex items-center space-x-1">
+              {evmIsConnected ? (
+                <>
+                  <span className="text-xs text-green-400">{getEVMDisplayName()}</span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="p-1 text-red-400 hover:text-red-300"
+                    onClick={() => {
+                      try {
+                        disconnectEVM();
+                        toast({
+                          title: "EVM Wallet Disconnected",
+                          description: "Successfully disconnected from EVM wallet",
+                          variant: "default",
+                        });
+                      } catch (error: any) {
+                        toast({
+                          title: "Disconnect Failed",
+                          description: error.message || "Failed to disconnect EVM wallet",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <LogOut className="w-3 h-3" />
+                  </Button>
+                </>
+              ) : (
+                <ConnectButton />
+              )}
+            </div>
+          </div>
+
+          {/* Aptos Wallet */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-gradient-primary rounded-full flex items-center justify-center">
+                <span className="text-primary-foreground font-bold text-xs">A</span>
+              </div>
+              <span className="text-xs text-muted-foreground">Aptos</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              {aptosIsConnected ? (
+                <>
+                  <span className="text-xs text-green-400">{getAptosDisplayName()}</span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="p-1 text-red-400 hover:text-red-300"
+                    onClick={() => {
+                      try {
+                        disconnectAptos();
+                        toast({
+                          title: "Aptos Wallet Disconnected",
+                          description: "Successfully disconnected from Aptos wallet",
+                          variant: "default",
+                        });
+                      } catch (error: any) {
+                        toast({
+                          title: "Disconnect Failed",
+                          description: error.message || "Failed to disconnect Aptos wallet",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <LogOut className="w-3 h-3" />
+                  </Button>
+                </>
+              ) : (
+                <AptosWalletSelector />
+              )}
+            </div>
           </div>
         </div>
       )}

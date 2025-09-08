@@ -1,6 +1,6 @@
-const AssetswapnBridge_Address = "0x1A80069a0cA012E2512E24c489c9cCcF7812D218";
+export const AssetswapnBridge_Address = "0x1A80069a0cA012E2512E24c489c9cCcF7812D218";
 
-const assetswapnBridge_abi = {
+export const assetswapnBridge_abi = {
   abi: [
     {
       type: "constructor",

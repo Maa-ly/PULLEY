@@ -1,21 +1,29 @@
 "use client"
 import React from 'react'
-import { createConfig, http } from '@wagmi/core'
-import { mainnet, localhost, coreDao, coreTestnet2 } from '@wagmi/core/chains'
-import { WagmiProvider } from 'wagmi'
+import { mainnet, kairos, coreDao, coreTestnet2, baseSepolia, sonic, sonicBlazeTestnet } from '@wagmi/core/chains'
+import { WagmiProvider, createConfig, http } from 'wagmi'
+import { AptosWalletProvider } from './aptos-provider'
+
 export const config = createConfig({
-  chains: [localhost, mainnet, coreDao, coreTestnet2],
+  chains: [mainnet, baseSepolia, kairos, coreDao, coreTestnet2, sonic, sonicBlazeTestnet],
   transports: {
-    [localhost.id]: http(),
+    [baseSepolia.id]: http(),
+    [kairos.id]: http(),
     [mainnet.id]: http(),
     [coreDao.id]: http(),
     [coreTestnet2.id]: http(),
+    [sonic.id]: http(),
+    [sonicBlazeTestnet.id]: http(),
   },
+  ssr: true,
 })
+
 const WagProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <WagmiProvider config={config}>
-      {children}
+      <AptosWalletProvider network="testnet">
+        {children}
+      </AptosWalletProvider>
     </WagmiProvider>
   )
 }

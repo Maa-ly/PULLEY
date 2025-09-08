@@ -1,6 +1,6 @@
-const PulleyToken_Address = "0x0355c4d9B6C64c6CA436b9520B5E8D6c3781d607";
+export const PulleyToken_Address = "0x0355c4d9B6C64c6CA436b9520B5E8D6c3781d607";
 
-const pulleyToken_abi = {
+export const pulleyToken_abi = {
   abi: [
     {
       type: "constructor",

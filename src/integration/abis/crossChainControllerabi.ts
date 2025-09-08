@@ -1,6 +1,6 @@
-const CrossChainController_Address = "0x85a77920ef2404772bA01c1155d80893cBB1cce6";
+export const CrossChainController_Address = "0x85a77920ef2404772bA01c1155d80893cBB1cce6";
 
-const crossChainController_abi = {
+export const crossChainController_abi = {
   abi: [
     {
       type: "constructor",

@@ -4,6 +4,10 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ParticleConnectkit } from "@/lib/particle";
 import WagProvider from "@/utils/provider";
+import { AptosWalletProvider } from "@/components/AptosWalletProvider";
+import { AutoConnectProvider } from "@/components/AutoConnectProvider";
+import { TransactionSubmitterProvider } from "@/components/TransactionSubmitterProvider";
+import { ReactQueryClientProvider } from "@/components/ReactQueryClientProvider";
 
 
 const geistSans = Geist({
@@ -44,7 +48,15 @@ export default function RootLayout({
       >
         <WagProvider>
           <ParticleConnectkit>
-            {children}
+            <AutoConnectProvider>
+              <ReactQueryClientProvider>
+                <TransactionSubmitterProvider>
+                  <AptosWalletProvider>
+                    {children}
+                  </AptosWalletProvider>
+                </TransactionSubmitterProvider>
+              </ReactQueryClientProvider>
+            </AutoConnectProvider>
           </ParticleConnectkit>
         </WagProvider>
       </body>

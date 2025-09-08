@@ -1,0 +1,2062 @@
+APTOS
+
+WALLETPROVIDER:
+"use client";
+
+import { AptosWalletAdapterProvider, DappConfig } from "@aptos-labs/wallet-adapter-react";
+import { setupAutomaticEthereumWalletDerivation } from "@aptos-labs/derived-wallet-ethereum";
+import { setupAutomaticSolanaWalletDerivation } from "@aptos-labs/derived-wallet-solana";
+import { PropsWithChildren } from "react";
+import { Network } from "@aptos-labs/ts-sdk";
+import { useClaimSecretKey } from "@/hooks/useClaimSecretKey";
+import { useAutoConnect } from "./AutoConnectProvider";
+import { useToast } from "./ui/use-toast";
+import { myTransactionSubmitter } from "@/utils/transactionSubmitter";
+import { useTransactionSubmitter } from "./TransactionSubmitterProvider";
+
+const searchParams =
+  typeof window !== "undefined"
+    ? new URL(window.location.href).searchParams
+    : undefined;
+const deriveWalletsFrom = searchParams?.get("deriveWalletsFrom")?.split(",");
+if (deriveWalletsFrom?.includes("ethereum")) {
+  setupAutomaticEthereumWalletDerivation({ defaultNetwork: Network.TESTNET });
+}
+if (deriveWalletsFrom?.includes("solana")) {
+  setupAutomaticSolanaWalletDerivation({ defaultNetwork: Network.TESTNET });
+}
+
+let dappImageURI: string | undefined;
+if (typeof window !== "undefined") {
+  dappImageURI = `${window.location.origin}${window.location.pathname}favicon.ico`;
+}
+
+export const WalletProvider = ({ children }: PropsWithChildren) => {
+  const { autoConnect } = useAutoConnect();
+  const { toast } = useToast();
+  const { useCustomSubmitter } = useTransactionSubmitter();
+
+  // Enables claim flow when the `claim` query param is detected
+  const claimSecretKey = useClaimSecretKey();
+
+  const dappConfig: DappConfig = {
+    network: Network.TESTNET,
+    aptosApiKeys: {
+      testnet: process.env.NEXT_PUBLIC_APTOS_API_KEY_TESNET,
+      devnet: process.env.NEXT_PUBLIC_APTOS_API_KEY_DEVNET,
+    },
+    aptosConnect: {
+      claimSecretKey,
+      dappId: "57fa42a9-29c6-4f1e-939c-4eefa36d9ff5",
+      dappImageURI,
+    },
+    mizuwallet: {
+      manifestURL:
+        "https://assets.mz.xyz/static/config/mizuwallet-connect-manifest.json",
+    },
+    transactionSubmitter: useCustomSubmitter ? myTransactionSubmitter : undefined,
+  };
+
+  return (
+    <AptosWalletAdapterProvider
+      key={useCustomSubmitter ? "custom" : "default"}
+      autoConnect={autoConnect}
+      dappConfig={dappConfig}
+      onError={(error) => {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error || "Unknown wallet error",
+        });
+      }}
+    >
+      {children}
+    </AptosWalletAdapterProvider>
+  );
+};
+
+
+
+WALLETSELECTOR:
+"use client";
+
+import {
+  APTOS_CONNECT_ACCOUNT_URL,
+  AboutAptosConnect,
+  AboutAptosConnectEducationScreen,
+  AdapterNotDetectedWallet,
+  AdapterWallet,
+  AptosPrivacyPolicy,
+  WalletItem,
+  WalletSortingOptions,
+  groupAndSortWallets,
+  isAptosConnectWallet,
+  isInstallRequired,
+  truncateAddress,
+  useWallet,
+} from "@aptos-labs/wallet-adapter-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ChevronDown,
+  Copy,
+  LogOut,
+  User,
+} from "lucide-react";
+import { useCallback, useState } from "react";
+import { Button } from "./ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import { useToast } from "./ui/use-toast";
+
+export function WalletSelector(walletSortingOptions: WalletSortingOptions) {
+  const { account, connected, disconnect, wallet } = useWallet();
+  const { toast } = useToast();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const closeDialog = useCallback(() => setIsDialogOpen(false), []);
+
+  const copyAddress = useCallback(async () => {
+    if (!account?.address) return;
+    try {
+      await navigator.clipboard.writeText(account.address.toString());
+      toast({
+        title: "Success",
+        description: "Copied wallet address to clipboard.",
+      });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to copy wallet address.",
+      });
+    }
+  }, [account?.address, toast]);
+
+  return connected ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button>
+          {account?.ansName ||
+            truncateAddress(account?.address?.toString()) ||
+            "Unknown"}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={copyAddress} className="gap-2">
+          <Copy className="h-4 w-4" /> Copy address
+        </DropdownMenuItem>
+        {wallet && isAptosConnectWallet(wallet) && (
+          <DropdownMenuItem asChild>
+            <a
+              href={APTOS_CONNECT_ACCOUNT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex gap-2"
+            >
+              <User className="h-4 w-4" /> Account
+            </a>
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onSelect={disconnect} className="gap-2">
+          <LogOut className="h-4 w-4" /> Disconnect
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : (
+    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <DialogTrigger asChild>
+        <Button>Connect a Wallet</Button>
+      </DialogTrigger>
+      <ConnectWalletDialog close={closeDialog} {...walletSortingOptions} />
+    </Dialog>
+  );
+}
+
+interface ConnectWalletDialogProps extends WalletSortingOptions {
+  close: () => void;
+}
+
+function ConnectWalletDialog({
+  close,
+  ...walletSortingOptions
+}: ConnectWalletDialogProps) {
+  const { wallets = [], notDetectedWallets = [] } = useWallet();
+
+  const { aptosConnectWallets, availableWallets, installableWallets } =
+    groupAndSortWallets(
+      [...wallets, ...notDetectedWallets],
+      walletSortingOptions,
+    );
+
+  const hasAptosConnectWallets = !!aptosConnectWallets.length;
+
+  return (
+    <DialogContent className="max-h-screen overflow-auto">
+      <AboutAptosConnect renderEducationScreen={renderEducationScreen}>
+        <DialogHeader>
+          <DialogTitle className="flex flex-col text-center leading-snug">
+            {hasAptosConnectWallets ? (
+              <>
+                <span>Log in or sign up</span>
+                <span>with Social + Aptos Connect</span>
+              </>
+            ) : (
+              "Connect Wallet"
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        {hasAptosConnectWallets && (
+          <div className="flex flex-col gap-2 pt-3">
+            {aptosConnectWallets.map((wallet) => (
+              <AptosConnectWalletRow
+                key={wallet.name}
+                wallet={wallet}
+                onConnect={close}
+              />
+            ))}
+            <p className="flex gap-1 justify-center items-center text-muted-foreground text-sm">
+              Learn more about{" "}
+              <AboutAptosConnect.Trigger className="flex gap-1 py-3 items-center text-foreground">
+                Aptos Connect <ArrowRight size={16} />
+              </AboutAptosConnect.Trigger>
+            </p>
+            <AptosPrivacyPolicy className="flex flex-col items-center py-1">
+              <p className="text-xs leading-5">
+                <AptosPrivacyPolicy.Disclaimer />{" "}
+                <AptosPrivacyPolicy.Link className="text-muted-foreground underline underline-offset-4" />
+                <span className="text-muted-foreground">.</span>
+              </p>
+              <AptosPrivacyPolicy.PoweredBy className="flex gap-1.5 items-center text-xs leading-5 text-muted-foreground" />
+            </AptosPrivacyPolicy>
+            <div className="flex items-center gap-3 pt-4 text-muted-foreground">
+              <div className="h-px w-full bg-secondary" />
+              Or
+              <div className="h-px w-full bg-secondary" />
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 pt-3">
+          {availableWallets.map((wallet) => (
+            <WalletRow key={wallet.name} wallet={wallet} onConnect={close} />
+          ))}
+          {!!installableWallets.length && (
+            <Collapsible className="flex flex-col gap-3">
+              <CollapsibleTrigger asChild>
+                <Button size="sm" variant="ghost" className="gap-2">
+                  More wallets <ChevronDown />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="flex flex-col gap-3">
+                {installableWallets.map((wallet) => (
+                  <WalletRow
+                    key={wallet.name}
+                    wallet={wallet}
+                    onConnect={close}
+                  />
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+        </div>
+      </AboutAptosConnect>
+    </DialogContent>
+  );
+}
+
+interface WalletRowProps {
+  wallet: AdapterWallet | AdapterNotDetectedWallet;
+  onConnect?: () => void;
+}
+
+function WalletRow({ wallet, onConnect }: WalletRowProps) {
+  return (
+    <WalletItem
+      wallet={wallet}
+      onConnect={onConnect}
+      className="flex items-center justify-between px-4 py-3 gap-4 border rounded-md"
+    >
+      <div className="flex items-center gap-4">
+        <WalletItem.Icon className="h-6 w-6" />
+        <WalletItem.Name className="text-base font-normal" />
+      </div>
+      {isInstallRequired(wallet) ? (
+        <Button size="sm" variant="ghost" asChild>
+          <WalletItem.InstallLink />
+        </Button>
+      ) : (
+        <WalletItem.ConnectButton asChild>
+          <Button size="sm">Connect</Button>
+        </WalletItem.ConnectButton>
+      )}
+    </WalletItem>
+  );
+}
+
+function AptosConnectWalletRow({ wallet, onConnect }: WalletRowProps) {
+  return (
+    <WalletItem wallet={wallet} onConnect={onConnect}>
+      <WalletItem.ConnectButton asChild>
+        <Button size="lg" variant="outline" className="w-full gap-4">
+          <WalletItem.Icon className="h-5 w-5" />
+          <WalletItem.Name className="text-base font-normal" />
+        </Button>
+      </WalletItem.ConnectButton>
+    </WalletItem>
+  );
+}
+
+function renderEducationScreen(screen: AboutAptosConnectEducationScreen) {
+  return (
+    <>
+      <DialogHeader className="grid grid-cols-[1fr_4fr_1fr] items-center space-y-0">
+        <Button variant="ghost" size="icon" onClick={screen.cancel}>
+          <ArrowLeft />
+        </Button>
+        <DialogTitle className="leading-snug text-base text-center">
+          About Aptos Connect
+        </DialogTitle>
+      </DialogHeader>
+
+      <div className="flex h-[162px] pb-3 items-end justify-center">
+        <screen.Graphic />
+      </div>
+      <div className="flex flex-col gap-2 text-center pb-4">
+        <screen.Title className="text-xl" />
+        <screen.Description className="text-sm text-muted-foreground [&>a]:underline [&>a]:underline-offset-4 [&>a]:text-foreground" />
+      </div>
+
+      <div className="grid grid-cols-3 items-center">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={screen.back}
+          className="justify-self-start"
+        >
+          Back
+        </Button>
+        <div className="flex items-center gap-2 place-self-center">
+          {screen.screenIndicators.map((ScreenIndicator, i) => (
+            <ScreenIndicator key={i} className="py-4">
+              <div className="h-0.5 w-6 transition-colors bg-muted [[data-active]>&]:bg-foreground" />
+            </ScreenIndicator>
+          ))}
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={screen.next}
+          className="gap-2 justify-self-end"
+        >
+          {screen.screenIndex === screen.totalScreens - 1 ? "Finish" : "Next"}
+          <ArrowRight size={16} />
+        </Button>
+      </div>
+    </>
+  );
+}
+
+
+
+
+AUTO-CONNET-PROVIDER:
+"use client";
+
+import {
+  FC,
+  ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+
+const AUTO_CONNECT_LOCAL_STORAGE_KEY = "AptosWalletAutoConnect";
+
+export interface AutoConnectContextState {
+  autoConnect: boolean;
+  setAutoConnect(autoConnect: boolean): void;
+}
+
+export const AutoConnectContext = createContext<AutoConnectContextState>(
+  {} as AutoConnectContextState,
+);
+
+export function useAutoConnect(): AutoConnectContextState {
+  return useContext(AutoConnectContext);
+}
+
+export const AutoConnectProvider: FC<{ children: ReactNode }> = ({
+  children,
+}) => {
+  const [autoConnect, setAutoConnect] = useState(false);
+
+  useEffect(() => {
+    // Wait until the app hydrates before populating `autoConnect` from local storage
+    try {
+      const isAutoConnect = localStorage.getItem(
+        AUTO_CONNECT_LOCAL_STORAGE_KEY,
+      );
+      if (isAutoConnect) return setAutoConnect(JSON.parse(isAutoConnect));
+    } catch (e) {
+      if (typeof window !== "undefined") {
+        console.error(e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (!autoConnect) {
+        localStorage.removeItem(AUTO_CONNECT_LOCAL_STORAGE_KEY);
+      } else {
+        localStorage.setItem(
+          AUTO_CONNECT_LOCAL_STORAGE_KEY,
+          JSON.stringify(autoConnect),
+        );
+      }
+    } catch (error: any) {
+      if (typeof window !== "undefined") {
+        console.error(error);
+      }
+    }
+  }, [autoConnect]);
+
+  return (
+    <AutoConnectContext.Provider value={{ autoConnect, setAutoConnect }}>
+      {children}
+    </AutoConnectContext.Provider>
+  );
+};
+
+
+
+import { aptosClient, isSendableNetwork } from "@/utils";
+import {
+  Account,
+  AccountAddress,
+  AccountAuthenticator,
+  AnyRawTransaction,
+  Ed25519Account,
+  parseTypeTag,
+  U64,
+} from "@aptos-labs/ts-sdk";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { useState } from "react";
+import { TransactionHash } from "../TransactionHash";
+import { Button } from "../ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { useToast } from "../ui/use-toast";
+import { LabelValueGrid } from "../LabelValueGrid";
+
+const APTOS_COIN = "0x1::aptos_coin::AptosCoin";
+/*
+script {
+    fun main(signer_1: &signer, _signer_2: &signer, to: address, amount: u64){
+        aptos_framework::aptos_account::transfer(signer_1,to,amount);
+    }
+}
+*/
+const TRANSFER_SCRIPT =
+  "0xa11ceb0b0700000a0601000203020605080d071525083a40107a1f010200030201000104060c060c05030003060c0503083c53454c463e5f30046d61696e0d6170746f735f6163636f756e74087472616e73666572ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000000000000000000000000000000000000000000000000000000000000114636f6d70696c6174696f6e5f6d65746164617461090003322e3003322e31000001070b000b01010b020b03110002";
+export function MultiAgent() {
+  const { toast } = useToast();
+  const { connected, account, network, signTransaction, submitTransaction } =
+    useWallet();
+
+  const [secondarySignerAccount, setSecondarySignerAccount] =
+    useState<Ed25519Account>();
+  const [transactionToSubmit, setTransactionToSubmit] =
+    useState<AnyRawTransaction | null>(null);
+
+  const [senderAuthenticator, setSenderAuthenticator] =
+    useState<AccountAuthenticator>();
+  const [secondarySignerAuthenticator, setSecondarySignerAuthenticator] =
+    useState<AccountAuthenticator>();
+
+  let sendable = isSendableNetwork(connected, network?.name);
+
+  const generateTransaction = async (): Promise<AnyRawTransaction> => {
+    if (!account) {
+      throw new Error("no account");
+    }
+    if (!network) {
+      throw new Error("no network");
+    }
+
+    const secondarySigner = Account.generate();
+    setSecondarySignerAccount(secondarySigner);
+
+    const transactionToSign = await aptosClient(
+      network,
+    ).transaction.build.multiAgent({
+      sender: account.address,
+      secondarySignerAddresses: [secondarySigner.accountAddress],
+      data: {
+        bytecode: TRANSFER_SCRIPT,
+        typeArguments: [],
+        functionArguments: [account.address, new U64(1)],
+      },
+    });
+    return transactionToSign;
+  };
+
+  const onSenderSignTransaction = async () => {
+    const transaction = await generateTransaction();
+    setTransactionToSubmit(transaction);
+    try {
+      const response = await signTransaction({
+        transactionOrPayload: transaction,
+      });
+      setSenderAuthenticator(response.authenticator);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const onSecondarySignerSignTransaction = async () => {
+    if (!transactionToSubmit) {
+      throw new Error("No Transaction to sign");
+    }
+    if (!secondarySignerAccount) {
+      throw new Error("No secondarySignerAccount");
+    }
+    try {
+      if (!secondarySignerAccount) {
+        throw new Error("No secondarySignerAccount");
+      }
+      const authenticator = aptosClient(network).sign({
+        signer: secondarySignerAccount,
+        transaction: transactionToSubmit,
+      });
+      setSecondarySignerAuthenticator(authenticator);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const onSubmitTransaction = async () => {
+    try {
+      if (!transactionToSubmit) {
+        throw new Error("No Transaction to sign");
+      }
+      if (!senderAuthenticator) {
+        throw new Error("No senderAuthenticator");
+      }
+      if (!secondarySignerAuthenticator) {
+        throw new Error("No secondarySignerAuthenticator");
+      }
+      const response = await submitTransaction({
+        transaction: transactionToSubmit,
+        senderAuthenticator: senderAuthenticator,
+        additionalSignersAuthenticators: [secondarySignerAuthenticator],
+      });
+      toast({
+        title: "Success",
+        description: <TransactionHash hash={response.hash} network={network} />,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Unable to submit multiagent Transaction.",
+      });
+      console.error(error);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Multi Agent Transaction Flow</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-8">
+        <div className="flex flex-wrap gap-4">
+          <Button onClick={onSenderSignTransaction} disabled={!sendable}>
+            Sign as sender
+          </Button>
+          <Button
+            onClick={onSecondarySignerSignTransaction}
+            disabled={!sendable || !senderAuthenticator}
+          >
+            Sign as secondary signer
+          </Button>
+          <Button
+            onClick={onSubmitTransaction}
+            disabled={!sendable || !secondarySignerAuthenticator}
+          >
+            Submit transaction
+          </Button>
+        </div>
+
+        {secondarySignerAccount && senderAuthenticator && (
+          <div className="flex flex-col gap-6">
+            <h4 className="text-lg font-medium">Secondary Signer details</h4>
+            <LabelValueGrid
+              items={[
+                {
+                  label: "Private Key",
+                  value: secondarySignerAccount.privateKey.toString(),
+                },
+                {
+                  label: "Public Key",
+                  value: secondarySignerAccount.publicKey.toString(),
+                },
+                {
+                  label: "Address",
+                  value: secondarySignerAccount.accountAddress.toString(),
+                },
+              ]}
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+
+
+
+
+PAGE.TSX:
+"use client";
+
+import { useAutoConnect } from "@/components/AutoConnectProvider";
+import { DisplayValue, LabelValueGrid } from "@/components/LabelValueGrid";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { WalletSelector as ShadcnWalletSelector } from "@/components/WalletSelector";
+import { MultiAgent } from "@/components/transactionFlows/MultiAgent";
+import { SingleSigner } from "@/components/transactionFlows/SingleSigner";
+import { Sponsor } from "@/components/transactionFlows/Sponsor";
+import { TransactionParameters } from "@/components/transactionFlows/TransactionParameters";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
+import { isMainnet } from "@/utils";
+import { Network } from "@aptos-labs/ts-sdk";
+import { WalletSelector as AntdWalletSelector } from "@aptos-labs/wallet-adapter-ant-design";
+import { WalletConnector as MuiWalletSelector } from "@aptos-labs/wallet-adapter-mui-design";
+import {
+  AccountInfo,
+  AdapterWallet,
+  AptosChangeNetworkOutput,
+  NetworkInfo,
+  isAptosNetwork,
+  useWallet,
+} from "@aptos-labs/wallet-adapter-react";
+import { init as initTelegram } from "@telegram-apps/sdk";
+import { AlertCircle } from "lucide-react";
+import Image from "next/image";
+
+// Imports for registering a browser extension wallet plugin on page load
+import { MyWallet } from "@/utils/standardWallet";
+import { registerWallet } from "@aptos-labs/wallet-standard";
+import { TransactionSubmitterToggle } from "@/components/TransactionSubmitterToggle";
+
+// Example of how to register a browser extension wallet plugin.
+// Browser extension wallets should call registerWallet once on page load.
+// When you click "Connect Wallet", you should see "Example Wallet"
+(function () {
+  if (typeof window === "undefined") return;
+  const myWallet = new MyWallet();
+  registerWallet(myWallet);
+})();
+
+const isTelegramMiniApp =
+  typeof window !== "undefined" &&
+  (window as any).TelegramWebviewProxy !== undefined;
+if (isTelegramMiniApp) {
+  initTelegram();
+}
+
+export default function Home() {
+  const { account, connected, network, wallet, changeNetwork } = useWallet();
+
+  return (
+    <main className="flex flex-col w-full max-w-[1000px] p-6 pb-12 md:px-8 gap-6">
+      <div className="flex justify-between gap-6 pb-10">
+        <div className="flex flex-col gap-2 md:gap-3">
+          <h1 className="text-xl sm:text-3xl font-semibold tracking-tight">
+            Aptos Wallet Adapter Tester
+            {network?.name ? ` — ${network.name}` : ""}
+          </h1>
+          <a
+            href="https://github.com/aptos-labs/aptos-wallet-adapter/tree/main/apps/nextjs-example"
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm text-muted-foreground underline underline-offset-2 font-medium leading-none"
+          >
+            Demo App Source Code
+          </a>
+        </div>
+        <div className="flex items-center gap-2">
+          <TransactionSubmitterToggle />
+          <ThemeToggle />
+        </div>
+      </div>
+      <WalletSelection />
+      {connected && (
+        <WalletConnection
+          account={account}
+          network={network}
+          wallet={wallet}
+          changeNetwork={changeNetwork}
+        />
+      )}
+      {connected && isMainnet(connected, network?.name) && (
+        <Alert variant="warning">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Warning</AlertTitle>
+          <AlertDescription>
+            The transactions flows below will not work on the Mainnet network.
+          </AlertDescription>
+        </Alert>
+      )}
+      {connected && (
+        <>
+          <TransactionParameters />
+          <SingleSigner />
+          <Sponsor />
+          <MultiAgent />
+        </>
+      )}
+    </main>
+  );
+}
+
+function WalletSelection() {
+  const { autoConnect, setAutoConnect } = useAutoConnect();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Wallet Selection</CardTitle>
+        <CardDescription>
+          Connect a wallet using one of the following wallet selectors.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-6 pt-6 pb-12 justify-between items-center">
+          <div className="flex flex-col gap-4 items-center">
+            <div className="text-sm text-muted-foreground">shadcn/ui</div>
+            <ShadcnWalletSelector />
+          </div>
+          <div className="flex flex-col gap-4 items-center">
+            <div className="text-sm text-muted-foreground">Ant Design</div>
+            <AntdWalletSelector />
+          </div>
+          <div className="flex flex-col gap-4 items-center">
+            <div className="text-sm text-muted-foreground">Material UI</div>
+            <MuiWalletSelector />
+          </div>
+        </div>
+        <label className="flex items-center gap-4 cursor-pointer">
+          <Switch
+            id="auto-connect-switch"
+            checked={autoConnect}
+            onCheckedChange={setAutoConnect}
+          />
+          <Label htmlFor="auto-connect-switch">
+            Auto reconnect on page load
+          </Label>
+        </label>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface WalletConnectionProps {
+  account: AccountInfo | null;
+  network: NetworkInfo | null;
+  wallet: AdapterWallet | null;
+  changeNetwork: (network: Network) => Promise<AptosChangeNetworkOutput>;
+}
+
+function WalletConnection({
+  account,
+  network,
+  wallet,
+  changeNetwork,
+}: WalletConnectionProps) {
+  const isValidNetworkName = () => {
+    if (isAptosNetwork(network)) {
+      return Object.values<string | undefined>(Network).includes(network?.name);
+    }
+    // If the configured network is not an Aptos network, i.e is a custom network
+    // we resolve it as a valid network name
+    if (network?.name === "custom") {
+      return true;
+    }
+
+    // Otherwise, the network is not valid
+    return false;
+  };
+
+  const isNetworkChangeSupported =
+    wallet?.features["aptos:changeNetwork"] !== undefined;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Wallet Connection</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-10 pt-6">
+        <div className="flex flex-col gap-6">
+          <h4 className="text-lg font-medium">Wallet Details</h4>
+          <LabelValueGrid
+            items={[
+              {
+                label: "Icon",
+                value: wallet?.icon ? (
+                  <Image
+                    src={wallet.icon}
+                    alt={wallet.name}
+                    width={24}
+                    height={24}
+                  />
+                ) : (
+                  "Not Present"
+                ),
+              },
+              {
+                label: "Name",
+                value: <p>{wallet?.name ?? "Not Present"}</p>,
+              },
+              {
+                label: "URL",
+                value: wallet?.url ? (
+                  <a
+                    href={wallet.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 dark:text-blue-300"
+                  >
+                    {wallet.url}
+                  </a>
+                ) : (
+                  "Not Present"
+                ),
+              },
+            ]}
+          />
+        </div>
+
+        <div className="flex flex-col gap-6">
+          <h4 className="text-lg font-medium">Account Info</h4>
+          <LabelValueGrid
+            items={[
+              {
+                label: "Address",
+                value: (
+                  <DisplayValue
+                    value={account?.address?.toString() ?? "Not Present"}
+                    isCorrect={!!account?.address}
+                  />
+                ),
+              },
+              {
+                label: "Public key",
+                value: (
+                  <DisplayValue
+                    value={account?.publicKey?.toString() ?? "Not Present"}
+                    isCorrect={!!account?.publicKey}
+                  />
+                ),
+              },
+              {
+                label: "ANS name",
+                subLabel: "(only if attached)",
+                value: <p>{account?.ansName ?? "Not Present"}</p>,
+              },
+              // {
+              //   label: "Min keys required",
+              //   subLabel: "(only for multisig)",
+              //   value: (
+              //     <p>{account?.minKeysRequired?.toString() ?? "Not Present"}</p>
+              //   ),
+              // },
+            ]}
+          />
+        </div>
+
+        <div className="flex flex-col gap-6">
+          <h4 className="text-lg font-medium">Network Info</h4>
+          <LabelValueGrid
+            items={[
+              {
+                label: "Network name",
+                value: (
+                  <DisplayValue
+                    value={network?.name ?? "Not Present"}
+                    isCorrect={isValidNetworkName()}
+                    expected={Object.values<string>(Network).join(", ")}
+                  />
+                ),
+              },
+              {
+                label: "URL",
+                value: network?.url ? (
+                  <a
+                    href={network.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 dark:text-blue-300"
+                  >
+                    {network.url}
+                  </a>
+                ) : (
+                  "Not Present"
+                ),
+              },
+              {
+                label: "Chain ID",
+                value: <p>{network?.chainId ?? "Not Present"}</p>,
+              },
+            ]}
+          />
+        </div>
+
+        <div className="flex flex-col gap-6">
+          <h4 className="text-lg font-medium">Change Network</h4>
+          <RadioGroup
+            value={network?.name}
+            orientation="horizontal"
+            className="flex gap-6"
+            onValueChange={(value: Network) => changeNetwork(value)}
+            disabled={!isNetworkChangeSupported}
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value={Network.DEVNET} id="devnet-radio" />
+              <Label htmlFor="devnet-radio">Devnet</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value={Network.TESTNET} id="testnet-radio" />
+              <Label htmlFor="testnet-radio">Testnet</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value={Network.MAINNET} id="mainnet-radio" />
+              <Label htmlFor="mainnet-radio">Mainnet</Label>
+            </div>
+          </RadioGroup>
+          {!isNetworkChangeSupported && (
+            <div className="text-sm text-red-600 dark:text-red-400">
+              * {wallet?.name ?? "This wallet"} does not support network change
+              requests
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+
+
+LAYOUT.TSX:
+import "@aptos-labs/wallet-adapter-ant-design/dist/index.css";
+import "./globals.css";
+
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { WalletProvider } from "@/components/WalletProvider";
+import { Toaster } from "@/components/ui/toaster";
+import { cn } from "@/lib/utils";
+import type { Metadata } from "next";
+import { Inter as FontSans } from "next/font/google";
+import { PropsWithChildren } from "react";
+import { AutoConnectProvider } from "@/components/AutoConnectProvider";
+import { ReactQueryClientProvider } from "@/components/ReactQueryClientProvider";
+import { TransactionSubmitterProvider } from "@/components/TransactionSubmitterProvider";
+
+const fontSans = FontSans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
+
+export const metadata: Metadata = {
+  title: "Aptos Wallet Adapter Example",
+  description:
+    "An example of how to use Aptos Wallet Adapter with React and Next.js.",
+};
+
+export default function RootLayout({ children }: PropsWithChildren) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={cn(
+          "flex justify-center min-h-screen bg-background font-sans antialiased",
+          fontSans.variable,
+        )}
+      >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AutoConnectProvider>
+            <ReactQueryClientProvider>
+              <TransactionSubmitterProvider>
+                <WalletProvider>
+                  {children}
+                  <Toaster />
+                </WalletProvider>
+              </TransactionSubmitterProvider>
+            </ReactQueryClientProvider>
+          </AutoConnectProvider>
+        </ThemeProvider>
+      </body>
+    </html>
+  );
+}
+
+
+
+
+SINGLE-SIGNER:
+import { isSendableNetwork, aptosClient } from "@/utils";
+import { parseTypeTag, AccountAddress, U64 } from "@aptos-labs/ts-sdk";
+import { InputTransactionData } from "@aptos-labs/wallet-adapter-core";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { Button } from "../ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "../ui/card";
+import { useToast } from "../ui/use-toast";
+import { TransactionHash } from "../TransactionHash";
+
+const APTOS_COIN = "0x1::aptos_coin::AptosCoin";
+
+/**
+ * Generate a nonce with alphanumeric characters only.
+ * This is a requirement for Sign in With Solana nonces
+ */
+function generateNonce() {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+
+export function SingleSigner() {
+  const { toast } = useToast();
+  const {
+    wallet,
+    connected,
+    account,
+    network,
+    signAndSubmitTransaction,
+    signMessageAndVerify,
+    signMessage,
+    signTransaction,
+    signIn,
+  } = useWallet();
+  let sendable = isSendableNetwork(connected, network?.name);
+
+  const onSignIn = async () => {
+    if (!wallet) {
+      return toast({
+        title: "Error",
+        description: "Wallet not connected",
+      });
+    }
+
+    const response = await signIn({
+      walletName: wallet.name,
+      input: {
+        domain: "localhost:3000",
+        nonce: Math.random().toString(16),
+        statement: "Signing into demo application",
+        notBefore: new Date().toISOString(),
+        expirationTime: new Date(
+          Date.now() + 1000 * 60 * 60 * 24
+        ).toISOString(),
+        issuedAt: new Date().toISOString(),
+        requestId: "abc",
+        resources: ["resource.1", "resource.2"],
+      },
+    });
+
+    console.log(response);
+    toast({ title: "Success", description: "Check console for response" });
+  };
+
+  const onSignInError = async () => {
+    if (!wallet) {
+      return toast({ title: "Error", description: "Wallet not connected" });
+    }
+
+    await signIn({
+      walletName: wallet.name,
+      input: {
+        nonce: Math.random().toString(16),
+        statement: "Signing into demo application",
+        notBefore: new Date().toISOString(),
+        expirationTime: new Date(
+          Date.now() + 1000 * 60 * 60 * 24
+        ).toISOString(),
+        issuedAt: new Date().toISOString(),
+        requestId: "abc",
+        resources: ["resource.1", "resource.2"],
+        address: "0x1",
+        chainId: "1",
+        domain: "example.com",
+        uri: "http://example.com",
+        version: "3",
+      } as any,
+    });
+  };
+
+  const onSignMessageAndVerify = async () => {
+    const payload = {
+      message: "Hello from Aptos Wallet Adapter",
+      nonce: generateNonce(),
+    };
+    const response = await signMessageAndVerify(payload);
+    toast({
+      title: "Success",
+      description: JSON.stringify({ onSignMessageAndVerify: response }),
+    });
+  };
+
+  const onSignMessage = async () => {
+    const payload = {
+      message: "Hello from Aptos Wallet Adapter",
+      nonce: generateNonce(),
+    };
+    const response = await signMessage(payload);
+    toast({
+      title: "Success",
+      description: JSON.stringify({ onSignMessage: response }),
+    });
+  };
+
+  const onSignAndSubmitTransaction = async () => {
+    if (!account) return;
+    const transaction: InputTransactionData = {
+      data: {
+        function: "0x1::coin::transfer",
+        typeArguments: [APTOS_COIN],
+        functionArguments: [account.address, 1], // 1 is in Octas
+      },
+    };
+    try {
+      const response = await signAndSubmitTransaction({
+        ...transaction,
+        pluginParams: {
+          customParam: "customValue",
+        },
+      });
+      await aptosClient(network).waitForTransaction({
+        transactionHash: response.hash,
+      });
+      toast({
+        title: "Success",
+        description: <TransactionHash hash={response.hash} network={network} />,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const onSignAndSubmitScriptTransaction = async () => {
+    if (!account) return;
+    const transaction: InputTransactionData = {
+      data: {
+        bytecode:
+          "0xa11ceb0b0700000a06010002030206050806070e2508334010731f010200030001000103060c050300083c53454c463e5f30046d61696e0d6170746f735f6163636f756e74087472616e73666572ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000000000000000000000000000000000000000000000000000000000000114636f6d70696c6174696f6e5f6d65746164617461090003322e3003322e31000001050b000b010b02110002",
+        typeArguments: [],
+        functionArguments: [account.address, new U64(1)], // 1 is in Octas
+      },
+    };
+    try {
+      const response = await signAndSubmitTransaction(transaction);
+      await aptosClient(network).waitForTransaction({
+        transactionHash: response.hash,
+      });
+      toast({
+        title: "Success",
+        description: <TransactionHash hash={response.hash} network={network} />,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const onSignAndSubmitBCSTransaction = async () => {
+    if (!account) return;
+
+    try {
+      const response = await signAndSubmitTransaction({
+        data: {
+          function: "0x1::coin::transfer",
+          typeArguments: [parseTypeTag(APTOS_COIN)],
+          functionArguments: [AccountAddress.from(account.address), new U64(1)], // 1 is in Octas
+        },
+      });
+      await aptosClient(network).waitForTransaction({
+        transactionHash: response.hash,
+      });
+      toast({
+        title: "Success",
+        description: <TransactionHash hash={response.hash} network={network} />,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  // Legacy typescript sdk support
+  const onSignTransaction = async () => {
+    try {
+      const payload: InputTransactionData = {
+        data: {
+          function: "0x1::coin::transfer",
+          typeArguments: [APTOS_COIN],
+          functionArguments: [account?.address, 1],
+        },
+      };
+      const response = await signTransaction({
+        transactionOrPayload: payload,
+      });
+      toast({
+        title: "Success",
+        description: JSON.stringify(response),
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const onSignRawTransaction = async () => {
+    if (!account) return;
+
+    try {
+      const transactionToSign = await aptosClient(
+        network
+      ).transaction.build.simple({
+        sender: account.address,
+        data: {
+          function: "0x1::coin::transfer",
+          typeArguments: [APTOS_COIN],
+          functionArguments: [account.address, 1],
+        },
+      });
+      const response = await signTransaction({
+        transactionOrPayload: transactionToSign,
+      });
+      toast({
+        title: "Success",
+        description: JSON.stringify(response),
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const onAddAuthenticationFunction = async () => {
+    if (!account) return;
+    alert("This method tests the wallet displays a warning message.");
+    const transaction: InputTransactionData = {
+      data: {
+        function: "0x1::account_abstraction::add_authentication_function",
+        functionArguments: [account.address, "dummyModule", "dummyFunction"],
+      },
+    };
+    try {
+      const response = await signAndSubmitTransaction(transaction);
+      await aptosClient(network).waitForTransaction({
+        transactionHash: response.hash,
+      });
+      toast({
+        title: "Success",
+        description: <TransactionHash hash={response.hash} network={network} />,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Single Signer Flow</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-4">
+          <Button onClick={onSignAndSubmitTransaction} disabled={!sendable}>
+            Sign and submit transaction
+          </Button>
+          <Button
+            onClick={onSignAndSubmitScriptTransaction}
+            disabled={!sendable}
+          >
+            Sign and submit script transaction
+          </Button>
+          <Button onClick={onSignAndSubmitBCSTransaction} disabled={!sendable}>
+            Sign and submit BCS transaction
+          </Button>
+          <Button onClick={onSignTransaction} disabled={!sendable}>
+            Sign transaction
+          </Button>
+          <Button onClick={onSignRawTransaction} disabled={!sendable}>
+            Sign raw transaction
+          </Button>
+          <Button onClick={onSignMessage} disabled={!sendable}>
+            Sign message
+          </Button>
+          <Button onClick={onSignMessageAndVerify} disabled={!sendable}>
+            Sign message and verify
+          </Button>
+          <Button onClick={onSignIn} disabled={!sendable}>
+            Sign in
+          </Button>
+          <Button onClick={onSignInError} disabled={!sendable}>
+            Sign in Error
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Account Abstraction</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-4">
+          <Button
+            onClick={onAddAuthenticationFunction}
+            disabled={!sendable}
+            variant="secondary"
+          >
+            Add authentication function
+          </Button>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+
+
+
+
+SPONSOR.TSX:
+import { aptosClient, isSendableNetwork } from "@/utils";
+import {
+  Account,
+  AccountAddress,
+  AccountAuthenticator,
+  AnyRawTransaction,
+} from "@aptos-labs/ts-sdk";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { useState } from "react";
+import { TransactionHash } from "../TransactionHash";
+import { Button } from "../ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { useToast } from "../ui/use-toast";
+
+export function Sponsor() {
+  const { toast } = useToast();
+  const { connected, account, network, signTransaction, submitTransaction } =
+    useWallet();
+  const [transactionToSubmit, setTransactionToSubmit] =
+    useState<AnyRawTransaction | null>(null);
+
+  const [senderAuthenticator, setSenderAuthenticator] =
+    useState<AccountAuthenticator>();
+  const [feepayerAuthenticator, setFeepayerAuthenticator] =
+    useState<AccountAuthenticator>();
+
+  const [senderAccount, setSenderAccount] = useState<Account | null>();
+
+  let sendable = isSendableNetwork(connected, network?.name);
+
+  // Generate a raw transaction using the SDK
+  const generateTransaction = async (
+    sender: Account
+  ): Promise<AnyRawTransaction> => {
+    if (!account) {
+      throw new Error("no account");
+    }
+    const transactionToSign = await aptosClient(
+      network
+    ).transaction.build.simple({
+      sender: sender.accountAddress,
+      withFeePayer: true,
+      data: {
+        function: "0x1::resource_account::create_resource_account",
+        typeArguments: [],
+        functionArguments: [
+          account.address,
+          AccountAddress.from("0x0").toUint8Array(),
+        ],
+      },
+    });
+    transactionToSign.feePayerAddress = account.address;
+    return transactionToSign;
+  };
+
+  const onSignTransaction = async () => {
+    let sender = Account.generate();
+    setSenderAccount(sender);
+
+    const transaction = await generateTransaction(sender);
+    setTransactionToSubmit(transaction);
+
+    try {
+      const authenticator = aptosClient(network).transaction.sign({
+        signer: sender,
+        transaction: transaction,
+      });
+      setSenderAuthenticator(authenticator);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const onSignTransactionAsSponsor = async () => {
+    if (!transactionToSubmit) {
+      throw new Error("No Transaction to sign");
+    }
+    try {
+      const response = await signTransaction({
+        transactionOrPayload: transactionToSubmit,
+        asFeePayer: true,
+      });
+      setFeepayerAuthenticator(response.authenticator);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const onSubmitTransaction = async () => {
+    if (!transactionToSubmit) {
+      throw new Error("No Transaction to sign");
+    }
+    if (!senderAuthenticator) {
+      throw new Error("No senderAuthenticator");
+    }
+    if (!feepayerAuthenticator) {
+      throw new Error("No feepayerAuthenticator");
+    }
+    try {
+      const response = await submitTransaction({
+        transaction: transactionToSubmit,
+        senderAuthenticator: senderAuthenticator,
+        feePayerAuthenticator: feepayerAuthenticator,
+      });
+      toast({
+        title: "Success",
+        description: <TransactionHash hash={response.hash} network={network} />,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Sponsor Transaction Flow</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap gap-4">
+        <Button onClick={onSignTransaction} disabled={!sendable}>
+          Sign as sender
+        </Button>
+        <Button
+          onClick={onSignTransactionAsSponsor}
+          disabled={!sendable || !senderAuthenticator}
+        >
+          Sign as sponsor
+        </Button>
+        <Button
+          onClick={onSubmitTransaction}
+          disabled={!sendable || !senderAuthenticator}
+        >
+          Submit transaction
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+
+
+
+hooks/claimsecretkey:
+import {
+  Account,
+  AccountAddress,
+  Aptos,
+  AptosConfig,
+  Ed25519PrivateKey,
+  Network,
+} from "@aptos-labs/ts-sdk";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo } from "react";
+
+const claimSecretKeyStorageKey = "@wallet-adapter-example-dapp/claimSecretKey";
+
+const config = new AptosConfig({ network: Network.TESTNET });
+const aptos = new Aptos(config);
+
+function getPersistedClaimSecretKey() {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const currentValue =
+    window.localStorage.getItem(claimSecretKeyStorageKey) ?? undefined;
+  if (currentValue) {
+    return currentValue;
+  }
+  const newValue = Ed25519PrivateKey.generate().toString();
+  window.localStorage.setItem(claimSecretKeyStorageKey, newValue);
+  return newValue;
+}
+
+export function useClaimSecretKey() {
+  const claimEnabled =
+    typeof window !== "undefined" &&
+    new URL(window.location.href).searchParams.get("claim") !== null;
+  const claimSecretKey = claimEnabled
+    ? getPersistedClaimSecretKey()
+    : undefined;
+  const claimAccountAddress = useMemo(() => {
+    if (!claimSecretKey) {
+      return undefined;
+    }
+    const secretKey = new Ed25519PrivateKey(claimSecretKey);
+    const account = Account.fromPrivateKey({ privateKey: secretKey });
+    return account.accountAddress;
+  }, [claimSecretKey]);
+
+  const { data: claimableBalance } = useQuery({
+    queryKey: ["accounts", claimAccountAddress, "aptBalance"],
+    queryFn: async () =>
+      aptos.getAccountCoinAmount({
+        accountAddress: claimAccountAddress!,
+        coinType: "0x1::aptos_coin::AptosCoin",
+      }),
+    enabled: claimAccountAddress !== undefined,
+  });
+
+  const {
+    isPending: isFunding,
+    mutate: fundAccount,
+    isSuccess: isFunded,
+  } = useMutation({
+    mutationFn: async (accountAddress: AccountAddress) =>
+      aptos.fundAccount({
+        accountAddress,
+        amount: 1e8 - (claimableBalance ?? 0),
+      }),
+  });
+
+  useEffect(() => {
+    if (claimAccountAddress === undefined || claimableBalance === undefined) {
+      return;
+    }
+
+    if (claimableBalance < 1e4 && !isFunded && !isFunding) {
+      fundAccount(claimAccountAddress);
+    }
+  }, [
+    claimAccountAddress,
+    claimSecretKey,
+    claimableBalance,
+    fundAccount,
+    isFunded,
+    isFunding,
+  ]);
+
+  return claimSecretKey;
+}
+
+
+
+lib:
+import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { NetworkInfo } from "@aptos-labs/wallet-adapter-core";
+
+export const aptosClient = (network?: NetworkInfo | null) => {
+  if (network?.name === Network.DEVNET) {
+    return DEVNET_CLIENT;
+  } else if (network?.name === Network.TESTNET) {
+    return TESTNET_CLIENT;
+  } else if (network?.name === Network.MAINNET) {
+    throw new Error("Please use devnet or testnet for testing");
+  } else {
+    const CUSTOM_CONFIG = new AptosConfig({
+      network: Network.CUSTOM,
+      fullnode: network?.url,
+    });
+    return new Aptos(CUSTOM_CONFIG);
+  }
+};
+
+// Devnet client
+export const DEVNET_CONFIG = new AptosConfig({
+  network: Network.DEVNET,
+});
+export const DEVNET_CLIENT = new Aptos(DEVNET_CONFIG);
+
+// Testnet client
+export const TESTNET_CONFIG = new AptosConfig({ network: Network.TESTNET });
+export const TESTNET_CLIENT = new Aptos(TESTNET_CONFIG);
+
+export const isSendableNetwork = (
+  connected: boolean,
+  networkName?: string,
+): boolean => {
+  return connected && !isMainnet(connected, networkName);
+};
+
+export const isMainnet = (
+  connected: boolean,
+  networkName?: string,
+): boolean => {
+  return connected && networkName === Network.MAINNET;
+};
+
+
+
+stanbdardwallet:
+import {
+  Account,
+  AccountAuthenticator,
+  AnyRawTransaction,
+  Aptos,
+  AptosConfig,
+  Hex,
+  Network,
+  SigningScheme,
+} from "@aptos-labs/ts-sdk";
+import {
+  APTOS_CHAINS,
+  AccountInfo,
+  AptosConnectMethod,
+  AptosDisconnectMethod,
+  AptosGetAccountMethod,
+  AptosGetNetworkMethod,
+  AptosOnAccountChangeMethod,
+  AptosSignMessageInput,
+  AptosSignMessageMethod,
+  AptosSignMessageOutput,
+  AptosSignTransactionMethod,
+  AptosWallet,
+  IdentifierArray,
+  NetworkInfo,
+  UserResponse,
+  registerWallet,
+  AptosWalletAccount,
+  AptosOnNetworkChangeMethod,
+  AptosFeatures,
+  UserResponseStatus,
+} from "@aptos-labs/wallet-standard";
+
+/**
+ * This is an implementation of the template AIP-62 Wallet Plugin template.
+ *
+ * Go to https://github.com/aptos-labs/wallet-standard/blob/main/example/wallet.ts to get the template with
+ * full instructions on how to rewrite it for your Wallet provider.
+ *
+ */
+
+/**
+ * Interface of a **WalletAccount**, also referred to as an **Account**.
+ *
+ * An account is a _read-only data object_ that is provided from the Wallet to the app, authorizing the app to use it.
+ *
+ * The app can use an account to display and query information from a chain.
+ *
+ * The app can also act using an account by passing it to functions of the Wallet.
+ *
+ * Wallets may use or extend {@link "@wallet-standard/wallet".ReadonlyWalletAccount} which implements this interface.
+ *
+ */
+export class MyWalletAccount implements AptosWalletAccount {
+  /** Address of the account, corresponding with a public key. */
+  address: string;
+
+  /** Public key of the account, corresponding with a secret key to use. */
+  publicKey: Uint8Array;
+
+  /**
+   * Chains supported by the account.
+   *
+   * This must be a subset of the {@link Wallet.chains | chains} of the Wallet.
+   */
+  chains: IdentifierArray;
+
+  /**
+   * Feature names supported by the account.
+   *
+   * This must be a subset of the names of {@link Wallet.features | features} of the Wallet.
+   */
+  features: IdentifierArray;
+
+  /** The signing scheme used for the private key of the address. Ex. SigningScheme.Ed25519 */
+  signingScheme: SigningScheme;
+
+  /** Optional user-friendly descriptive label or name for the account. This may be displayed by the app. */
+  label?: string;
+
+  /**
+   * Optional user-friendly icon for the account. This may be displayed by the app.
+   * It is highly recommended that an icon is provided for users to identify your app.
+   */
+  icon?:
+    | `data:image/svg+xml;base64,${string}`
+    | `data:image/webp;base64,${string}`
+    | `data:image/png;base64,${string}`
+    | `data:image/gif;base64,${string}`
+    | undefined;
+
+  constructor(account: Account) {
+    this.address = account.accountAddress.toString();
+    this.publicKey = account.publicKey.toUint8Array();
+    this.chains = APTOS_CHAINS; // ["aptos:devnet", "aptos:testnet", "aptos:localnet", "aptos:mainnet"]
+    this.features = ["aptos:connect"];
+    this.signingScheme = SigningScheme.Ed25519;
+  }
+}
+
+export class MyWallet implements AptosWallet {
+  readonly url: string = "https://aptos.dev";
+  // This should be updated whenever you release a new implementation of "MyWallet"
+  readonly version = "1.0.0";
+  readonly name: string = "Example Wallet";
+  /**
+   * The icon data must be of the format:
+   * 1. "data:image/"
+   * 2. The icon's file extension, which must be one of:
+   *    - "svg+xml"
+   *    - "webp"
+   *    - "png"
+   *    - "gif"
+   * 3. ";base64,"
+   * 4. The base64 encoding of the image file.
+   *
+   * See the current value of icon for an example of this format.
+   */
+  readonly icon =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAWbSURBVHgB7Z09c9NYFIaPlFSpUqQNK6rQhbSkWJghLZP9BesxfwAqytg1xe7+AY+3go5ACzObBkpwSqrVQkuRCiqkva8UZW1je22wpHPveZ8ZRU6wwwznueee+6FLJCuSdzrb7nZTNjaOJc9/ctdNiaJESPPkeeq+phLH5/L162k0HJ7JikTLvtEFPnFBf+D+0l/dt9tCNJK6xnjmZOg7GdJlPvC/AhQtPo5P3MsHQvwhiobLiLBQABf82y74z4Qt3ldSybKHToLTeW+I5/1B3u2euOD/JQy+zyRowEUs5zAzA1x+oCckJHrRYNCf/uE3AjD4QfONBBMC5PfvY2j3TEi4ZNmd8eHilQDFMK/s8xMhIXPhJLjuJLjAN/8VgRsbPWHwLbAtm5tXRWGRAS5b/99C7FBmgbTMAGXrJ5aIomJir8wA3S5afyLEEkUtEBezfQy+RYpFvdilgmMhNnGxRw2wL8QqScy1fMNE0T4yQCLEKkksxDQUwDj2BNjbK69pdndn/zxwNsUCCOyNGyJ374psbYkMBiLv30++59o1kW5X5NMnkdFI5OXL8nXghCsAAn10NL/Fz2NnpxQFFyR5/bq8BypDWAIg6AcHIoeH60nn4/K8e1deECIgwhAAQULQEXxIUAf43bju3ZvMDJ7jrwDT/XpToIvABeECqBf8EuB7+/W6CKBe0C/Auvv1uvC0XtArQBP9el14VC/oEqCtfr0uPKgX2hdAW79eF0rrhfYFQPCRKi1RyY4ZyZYF4GKQcSiAcSiAcSiAcSiAcSiAcSiAcSiAcSiAcSiAcSiAcSiAcSiAcShAm3z+LG1DAdqEAhjn40dpGwrQFtgIwgxgGAWtH1CAtsC2cQVQgLZQsk2cArSBoqeHKEAbKHpiiAI0DVq+kv4fUICmQetXMPyroABNgtb/5o1oggI0icJzBChAUyDwr16JNihAUzx+LBqhAE3w5InaU0MoQN08f64y9VdQgDrBkO/FC9EMBagLBB/P/yvHxlGxTYPh3tOn4gMUYN2g4FPc509DAdYFqvxZh1ArhwKsg6rSVzTHvywU4EeoqnyPTxKnAKuCVo4iD4s6ARwhTwGWoTrk8e3bIE4IH4cCVCDI1U6dL1/K73Eh4B727ctCASoQ6MBa9zJwJtA4FMA4FMA4FMA4FMA4FMA4FMA4FMA47Qtg4P/n1Uz7AgQ8zeoD7Qug5KQMq+joApgFWkNHEWhwEUYLFMA4OgRQdGCCNXQIUG28II2jZyKIWaAV9Aig7OgUK+gRAMH36ImaUNC1FoDt1swCjaJLAAQfT9mQxtC3GohugCOCxtC5HIyHLNkVNIJOATAv4Mnz9b6jd0MIhoWsB2pH944gPHmLkQGpDf1bwtAVUILa8GNPICRgd1AL/mwKRXfA0cHa8WtXMArDfp8bSdeIf9vCEfxHj8psQBF+GH/PB0A2wIzhrVsih4ciOztCVsfvAyKQAVAbYPr44EDk6Ehkd1fI8oRxQggKQ2QEXMgEe3ulELhvbQmZT3hHxFRn+1Tn/UAAZAWIUXUTHz4IKQn/jCBkB6Pn/ywDHw41DgUwDgRIhVgljSWKzoXYJM+dAFmWCrHKeewsOBViExd71AAjd10IsUYaDYdnsfty4Uz4U4g1zvClHAbm+e9CbJFlfdwKAVwWSJ0EfwixwrCIuYxPBOV5T1gLWCCtWj+4EqCoBbLsFyFhk2UPq9YPJqaCURW6W19IqPRdjCeG/dGsd+Xdbs/dToSERD8aDHrTP4zmvZsSBMXM4INo0afyTudY4vg39zIR4iNFXXfZtc9k4XJw0V9k2R1OFHkIhvVZdn1R8MHCDDDx+zqdxK0c9tz1szAjaKWc1XUTe+OV/iKWFmAcJ8NtJ8Kxe7kvkCGKEiHN45Zz3b/9yN3/uVzUGxXD+RX4F56985hsqA6SAAAAAElFTkSuQmCC";
+  /**
+   * APTOS_CHAINS = ["aptos:devnet", "aptos:testnet", "aptos:localnet", "aptos:mainnet"]
+   * It is recommended to support at least "aptos:mainnet", "aptos:testnet", and "aptos:devnet".
+   */
+  chains = APTOS_CHAINS;
+  /**
+   * The set of accounts that your Wallet has shared information for. These do NOT include private keys.
+   * This list is normally expanded during `aptos:connect` and reduced during `aptos:disconnect`.
+   * NOTE: For demonstration purposes, the template initializes a default account in the constructor,
+   * but that should NOT be carried into your final implementation of this template.
+   */
+  accounts: MyWalletAccount[] = [];
+
+  // Local MyWallet class variables,
+  /**
+   * These are used throughout this example's feature implementations in order to show how you could
+   * implement each function.
+   *
+   * signer - This stores the private keys for an account on-chain. (Example purposes only)
+   * aptos - This handles the network connection. (Your wallet may have a different way of handling the on-chain connection than this Aptos instance)
+   *
+   * Remember: These two variables SHOULD LIKELY BE DELETED after you replace your implementations of each feature with ones that use your Wallet.
+   */
+  signer: Account;
+  aptos: Aptos;
+
+  /**
+   * In order to be compatible with the AIP-62 Wallet standard, ensure you are at least supporting all
+   * currently required features by checking the list of features in the `AptosFeatures` type here:
+   * https://github.com/aptos-labs/wallet-standard/blob/main/src/features/index.ts
+   *
+   * To find the names of features to pass into `this.features` below you can either go into the feature implementations
+   * and look at the <AptosFeature>NameSpace variable, or you can import the `AptosFeatures` type and see the names there.
+   * Ex. See `AptosSignTransactionNamespace` in https://github.com/aptos-labs/wallet-standard/blob/main/src/features/aptosSignTransaction.ts
+   *
+   * For additional customization, you may implement optional features.
+   * For the most support though, you should extend the wallet-standard to support additional features as part of the standard.
+   */
+  get features(): AptosFeatures {
+    return {
+      "aptos:connect": {
+        version: "1.0.0",
+        connect: this.connect,
+      },
+      "aptos:network": {
+        version: "1.0.0",
+        network: this.network,
+      },
+      "aptos:disconnect": {
+        version: "1.0.0",
+        disconnect: this.disconnect,
+      },
+      "aptos:signTransaction": {
+        version: "1.0.0",
+        signTransaction: this.signTransaction,
+      },
+      "aptos:signMessage": {
+        version: "1.0.0",
+        signMessage: this.signMessage,
+      },
+      "aptos:onAccountChange": {
+        version: "1.0.0",
+        onAccountChange: this.onAccountChange,
+      },
+      "aptos:onNetworkChange": {
+        version: "1.0.0",
+        onNetworkChange: this.onNetworkChange,
+      },
+      "aptos:account": {
+        version: "1.0.0",
+        account: this.account,
+      },
+    };
+  }
+
+  /**
+   * The template code's constructor currently initializes `signer` to act as the private key for an account on-chain, and uses
+   * `aptos` to handle the on-chain connection.
+   *
+   */
+  constructor() {
+    // Create a random signer for our stub implementations.
+    this.signer = Account.generate();
+    // We will use DEVNET since we can fund our test account via a faucet there.
+    const aptosConfig = new AptosConfig({
+      network: Network.DEVNET,
+    });
+    // Use the instance Aptos connection to process requests.
+    this.aptos = new Aptos(aptosConfig);
+
+    // Update our Wallet object to know that we are connected to this new signer.
+    this.accounts = [new MyWalletAccount(this.signer)];
+  }
+
+  /**
+   * Look up the account info for the currently connected wallet address on the chosen network.
+   *
+   * @returns Return account info.
+   */
+  account: AptosGetAccountMethod = async (): Promise<AccountInfo> => {
+    const account = new AccountInfo({
+      address: this.signer.accountAddress,
+      publicKey: this.signer.publicKey,
+    });
+    return Promise.resolve(account);
+  };
+
+  /**
+   * Connect an account using this Wallet.
+   * This must wait for the user to sign in to the Wallet provider and confirm they are ok sharing
+   * details with the dapp.
+   *
+   * For demonstration purposes, this template example assumes the user is using the account generated in `signer`
+   * and assumes the user approved letting the dapp use the account information.
+   *
+   * Your implmentation should include a way to track which account was just connected. This likely will involve
+   * setting the `this.accounts` variable.
+   *
+   * @returns Whether the user approved connecting their account, and account info.
+   * @throws Error when unable to connect to the Wallet provider.
+   */
+  connect: AptosConnectMethod = async (): Promise<
+    UserResponse<AccountInfo>
+  > => {
+    try {
+      await this.aptos.fundAccount({
+        accountAddress: this.signer.accountAddress,
+        amount: 1_000_000_000_000,
+        options: { waitForIndexer: false },
+      });
+      const account = new AccountInfo({
+        address: this.signer.accountAddress,
+        publicKey: this.signer.publicKey,
+      });
+      return {
+        status: UserResponseStatus.APPROVED,
+        args: account,
+      };
+    } catch (e) {
+      throw Error(`error connecting to wallet ${e}`);
+    }
+  };
+
+  /**
+   * Return the name, chainId, and url of the network connection your wallet is using to connect to the Aptos chain.
+   *
+   * @returns Which network the connected Wallet is pointing to.
+   */
+  network: AptosGetNetworkMethod = async (): Promise<NetworkInfo> => {
+    // You may use getLedgerInfo() to determine which ledger your Wallet is connected to.
+    const network = await this.aptos.getLedgerInfo();
+    return {
+      // REVISION - Ensure the name and url match the chain_id your wallet responds with.
+      name: Network.DEVNET,
+      chainId: network.chain_id,
+      url: "https://fullnode.devnet.aptoslabs.com/v1",
+    };
+  };
+
+  /**
+   * Remove the permission of the Wallet class to access the account that was connected.
+   *
+   * @returns Resolves when done cleaning up.
+   */
+  disconnect: AptosDisconnectMethod = async (): Promise<void> => {
+    // THIS LOGIC SHOULD BE REPLACED. IT IS FOR EXAMPLE PURPOSES ONLY.
+    return Promise.resolve();
+  };
+
+  /**
+   * @param transaction - A transaction that the user should have the ability to sign if they choose to.
+   * @param asFeePayer - Optionally, another this signature is acting as a fee-payer for the transaction being signed.
+   * @returns The result of whether the user chose to sign the transaction or not.
+   */
+  signTransaction: AptosSignTransactionMethod = async (
+    transaction: AnyRawTransaction,
+    asFeePayer?: boolean,
+  ): Promise<UserResponse<AccountAuthenticator>> => {
+    // THIS LOGIC SHOULD BE REPLACED. IT IS FOR EXAMPLE PURPOSES ONLY.
+    if (asFeePayer) {
+      const senderAuthenticator = this.aptos.transaction.signAsFeePayer({
+        signer: this.signer,
+        transaction,
+      });
+
+      return Promise.resolve({
+        status: UserResponseStatus.APPROVED,
+        args: senderAuthenticator,
+      });
+    }
+    const senderAuthenticator = this.aptos.transaction.sign({
+      signer: this.signer,
+      transaction,
+    });
+
+    return Promise.resolve({
+      status: UserResponseStatus.APPROVED,
+      args: senderAuthenticator,
+    });
+  };
+
+  /**
+   * @param input - A message to sign with the private key of the connected account.
+   * @returns A user response either with a signed message, or the user rejecting to sign.
+   */
+  signMessage: AptosSignMessageMethod = async (
+    input: AptosSignMessageInput,
+  ): Promise<UserResponse<AptosSignMessageOutput>> => {
+    // 'Aptos' + application + address + nonce + chainId + message
+    const messageToSign = `Aptos
+    demoAdapter
+    ${this.signer.accountAddress.toString()}
+    ${input.nonce}
+    ${input.chainId ?? (await this.network()).chainId}
+    ${input.message}`;
+
+    const encodedMessageToSign = new TextEncoder().encode(messageToSign);
+
+    const signature = this.signer.sign(encodedMessageToSign);
+
+    return Promise.resolve({
+      status: UserResponseStatus.APPROVED,
+      args: {
+        address: this.signer.accountAddress.toString(),
+        fullMessage: messageToSign,
+        message: input.message,
+        nonce: input.nonce,
+        prefix: "APTOS",
+        signature: signature,
+      },
+    });
+  };
+
+  /**
+   * An event which will be triggered anytime an Account changes.
+   *
+   * @returns when the logic is resolved.
+   */
+  onAccountChange: AptosOnAccountChangeMethod = async (): Promise<void> => {
+    return Promise.resolve();
+  };
+
+  /**
+   * When users indicate a Network change should occur, update your Wallet accordingly.
+   *
+   * @returns when the logic is resolved.
+   */
+  onNetworkChange: AptosOnNetworkChangeMethod = async (): Promise<void> => {
+    return Promise.resolve();
+  };
+}
+
+// This is for browser extension wallets only.
+// registerWallet should be called by your browser extension wallet on page load to notify dapps that your wallet is available.
+// In this demo dapp, we use the following function in app/page.tsx to register "MyWallet".
+// (function () {
+//   if (typeof window === "undefined") return;
+//   const myWallet = new MyWallet();
+//   registerWallet(myWallet);
+// })();
+
+
+
+tansctionsubmitter:
+import {
+  Aptos,
+  AptosConfig,
+  InputSubmitTransactionData,
+  PendingTransactionResponse,
+  TransactionSubmitter,
+} from "@aptos-labs/ts-sdk";
+
+/**
+ * This is a dummy transaction submitter that just logs the transaction and then
+ * submits it normally.
+ */
+class MyTransactionSubmitter implements TransactionSubmitter {
+  submitTransaction(
+    args: { aptosConfig: AptosConfig } & Omit<
+      InputSubmitTransactionData,
+      "transactionSubmitter"
+    >,
+  ): Promise<PendingTransactionResponse> {
+    const { aptosConfig } = args;
+    console.log("Submitting transaction with MyTransactionSubmitter", args);
+    const aptos = new Aptos(aptosConfig);
+    return aptos.transaction.submit.simple({
+        ...args,
+        // We do this so we don't recurse back to this function but instead use the
+        // proper regular txn submitter.
+        transactionSubmitter: null,
+    });
+  }
+}
+
+export const myTransactionSubmitter = new MyTransactionSubmitter();
+
+

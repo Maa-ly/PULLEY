@@ -1,6 +1,6 @@
-const TradingPool_Address = "0x2186d551E855A5CAFd80877fd4A2DEEF3C146A9e";
+export const TradingPool_Address = "0x2186d551E855A5CAFd80877fd4A2DEEF3C146A9e";
 
-const tradingPool_abi = {
+export const tradingPool_abi = {
   abi: [
     {
       type: "constructor",

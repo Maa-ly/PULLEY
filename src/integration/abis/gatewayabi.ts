@@ -1,6 +1,6 @@
-const Gateway_Address = "0xBdC7be341E121A9939E6EA0b21f56FDFa4484b16";
+export const Gateway_Address = "0xBdC7be341E121A9939E6EA0b21f56FDFa4484b16";
 
-const gateway_abi = {
+export const gateway_abi = {
   abi: [
     {
       type: "constructor",

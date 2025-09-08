@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { createGroqModel } from "@/lib/llm/groq";
 import { fetchCryptoPanicNews, summarizeNews } from "@/lib/news/cryptopanic";
+import { getNewsRetrievalContext } from "@/lib/rag";
 import type { PredictionInput, PredictionOutput } from "@/utils/types";
 
 export const PredictionInputSchema = z.object({
@@ -52,9 +53,12 @@ export async function runPredictionTool(input: PredictionInput): Promise<Predict
     region: 'en',
   });
   const newsSummary = summarizeNews(newsItems, 8);
+  // RAG: build a small retrieval context (embeddings-backed if available)
+  const retrievalContext = await getNewsRetrievalContext(input, 6);
 
   const prompt = `You are a risk-aware trading planner.
-Combine technical context (OHLC, price, change) and fundamental context (news headlines) to propose limit orders.
+Combine technical context (OHLC, price, change) and fundamental context (news headlines).
+You are provided a retrievalContext of the most relevant recent news snippets.
 Return JSON matching the schema, including:
 - rationale: a compact paragraph (2-4 sentences) explaining the plan.
 - steps: 3-6 short bullets describing the reasoning (signals, levels, risk controls).
@@ -66,7 +70,7 @@ Output strictly valid JSON.`;
 
   const result = await structured.invoke([
     { role: "system", content: prompt },
-    { role: "user", content: JSON.stringify({ ...input, news: newsSummary }) },
+    { role: "user", content: JSON.stringify({ ...input, news: newsSummary, retrievalContext }) },
   ] as any);
   return result as PredictionOutput;
 }
