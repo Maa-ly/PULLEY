@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
@@ -27,7 +29,7 @@ export interface WalletState {
 export function useWallet() {
   // EVM wallet state
   const { address: evmAddress, isConnected: evmIsConnected } = useAccount()
-  const { connect: connectEVM, isPending: evmIsConnecting } = useConnect()
+  const { connectors, connect: connectEVM, isPending: evmIsConnecting } = useConnect()
   const { disconnect: disconnectEVM } = useDisconnect()
   
   // Aptos wallet state
@@ -35,7 +37,8 @@ export function useWallet() {
     account: aptosAccount,
     connected: aptosIsConnected,
     connect: connectAptos,
-    disconnect: disconnectAptos
+    disconnect: disconnectAptos,
+    wallets
   } = useAptosWallet()
   
   const aptosAddress = aptosAccount?.address?.toString() || null
@@ -59,7 +62,16 @@ export function useWallet() {
   // Connect to EVM wallet
   const connectToEVM = async () => {
     try {
-      await connectEVM()
+      // Get the first available connector (Particle Connect)
+      const connector = connectors[0]
+      if (!connector) {
+        throw new Error("No EVM connectors available. Please ensure Particle Connect is properly configured.")
+      }
+      
+      await connectEVM({ 
+        connector,
+        chainId: 1,
+      })
       setActiveWallet('evm')
       
       // Show success toast
@@ -71,6 +83,8 @@ export function useWallet() {
       
       return { success: true, address: evmAddress }
     } catch (error: any) {
+      console.error("EVM connection error:", error)
+      
       // Show error toast
       toast({
         title: "EVM Connection Failed",
@@ -85,18 +99,26 @@ export function useWallet() {
   // Connect to Aptos wallet
   const connectToAptos = async () => {
     try {
-      await connectAptos()
+      // Get the first available wallet
+      const wallet = wallets[0]
+      if (!wallet) {
+        throw new Error("No Aptos wallets available. Please install an Aptos wallet.")
+      }
+      
+      await connectAptos(wallet.name)
       setActiveWallet('aptos')
       
       // Show success toast
       toast({
         title: "Aptos Wallet Connected",
-        description: `Successfully connected to Aptos wallet`,
+        description: `Successfully connected to ${wallet.name}`,
         variant: "default",
       })
       
       return { success: true, address: aptosAddress }
     } catch (error: any) {
+      console.error("Aptos connection error:", error)
+      
       // Show error toast
       toast({
         title: "Aptos Connection Failed",

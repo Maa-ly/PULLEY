@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { z } from "zod";
 import { createGroqModel } from "@/lib/llm/groq";
@@ -44,7 +45,6 @@ export const PredictionOutputSchema = z.object({
 
 export async function runPredictionTool(input: PredictionInput): Promise<PredictionOutput> {
   const model = createGroqModel();
-  const structured = model.withStructuredOutput(PredictionOutputSchema, { name: "prediction" });
 
   // Pull recent news for fundamentals
   const newsItems = await fetchCryptoPanicNews({
@@ -68,11 +68,22 @@ Rules:
 - Prefer few high-quality orders.
 Output strictly valid JSON.`;
 
-  const result = await structured.invoke([
+  const raw = await model.invoke([
     { role: "system", content: prompt },
     { role: "user", content: JSON.stringify({ ...input, news: newsSummary, retrievalContext }) },
   ] as any);
-  return result as PredictionOutput;
+
+  // Parse JSON and validate with Zod
+  let parsed: unknown;
+  try {
+    const cleaned = typeof raw === 'string' ? raw.trim().replace(/^```json\n?|```$/g, '') : raw;
+    parsed = JSON.parse(cleaned as string);
+  } catch (e) {
+    throw new Error(`Model did not return valid JSON: ${(raw as any)?.slice?.(0, 200) || String(raw)}`);
+  }
+
+  const validated = PredictionOutputSchema.parse(parsed);
+  return validated as PredictionOutput;
 }
 
 

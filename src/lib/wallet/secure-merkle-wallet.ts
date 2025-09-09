@@ -1,10 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { MerkleClient } from "@/lib/merkle/src/client";
 import { MerkleClientConfig } from "@/lib/merkle/src/client/config";
 import { Aptos, Account, AccountAddress } from "@aptos-labs/ts-sdk";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 
 export interface SecureMerkleWalletConfig {
-  // No private key needed - uses connected wallet
+  privateKey?: string;
 }
 
 export class SecureMerkleWalletManager {

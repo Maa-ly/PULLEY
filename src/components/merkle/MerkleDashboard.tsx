@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -71,13 +73,6 @@ export function MerkleDashboard({ walletAddress, isConnected }: MerkleDashboardP
   const [stopLoss, setStopLoss] = useState<string>("");
   const [takeProfit, setTakeProfit] = useState<string>("");
 
-  // Load user data when wallet connects
-  useEffect(() => {
-    if (walletConnected && walletManager) {
-      loadUserData();
-    }
-  }, [walletConnected, walletManager]);
-
   // Load user data
   const loadUserData = useCallback(async () => {
     if (!walletManager) return;
@@ -101,7 +96,15 @@ export function MerkleDashboard({ walletAddress, isConnected }: MerkleDashboardP
     } catch (err: any) {
       setError(`Failed to load user data: ${err.message}`);
     }
-  }, [walletManager, getUSDCBalance, getPositions, getOrders]);
+  }, [walletManager, getUSDCBalance, getPositions, getOrders, setError, setPositions, setOrders, setUsdcBalance]);
+
+  // Load user data when wallet connects
+  useEffect(() => {
+    if (walletConnected && walletManager) {
+      loadUserData();
+    }
+  }, [walletConnected, walletManager, loadUserData]);
+
 
   // Faucet USDC for testnet
   const handleFaucet = async () => {

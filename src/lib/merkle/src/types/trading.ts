@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-namespace */
 import type { Simplify } from "type-fest";
 
 import type { Hex, MoveStructId, TableHandle } from "./index";

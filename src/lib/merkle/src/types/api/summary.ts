@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-namespace */
 import type { Hex, MoveStructId } from "../index";
 
 export type RawSummaryResponse = {

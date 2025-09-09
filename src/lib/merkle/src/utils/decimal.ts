@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-namespace */
 import type * as tsa from "ts-arithmetic";
 import type * as tf from "type-fest";
 
@@ -50,16 +51,16 @@ export function one<N extends Range>(
   decimals: N,
   isPositive?: boolean,
 ): Decimal<N> {
-  const one0 = dec0(isPositive === undefined || isPositive ? 1n : -1n);
+  const one0 = dec0(isPositive === undefined || isPositive ? BigInt(1) : BigInt(-1));
   return shift(one0, decimals) as Decimal<N>;
 }
 
 export function zero<N extends Range>() {
-  return 0n as Decimal<N>;
+  return BigInt(0) as Decimal<N>;
 }
 
 export function sign<N extends Range>(n: Decimal<N>) {
-  return (n > 0n ? 1n : -1n) as Decimal<N>;
+  return (n > BigInt(0) ? BigInt(1) : BigInt(-1)) as Decimal<N>;
 }
 
 export function neg<N extends Range>(n: Decimal<N>) {
@@ -72,9 +73,9 @@ export function shift<
 >(n: Decimal<N>, shiftBy: S) {
   if (shiftBy === 0) return n as Decimal<Range.UnsafeAdd<N, S>>;
   if (shiftBy > 0) {
-    return (n * 10n ** BigInt(shiftBy)) as Decimal<Range.UnsafeAdd<N, S>>;
+    return (n * BigInt(10) ** BigInt(shiftBy)) as Decimal<Range.UnsafeAdd<N, S>>;
   }
-  return (n / 10n ** BigInt(-shiftBy)) as Decimal<Range.UnsafeAdd<N, S>>;
+  return (n / BigInt(10) ** BigInt(-shiftBy)) as Decimal<Range.UnsafeAdd<N, S>>;
 }
 
 export function add<N extends Range>(a: Decimal<N>, b: Decimal<NoInfer<N>>) {
@@ -124,11 +125,11 @@ export function max<N extends Range>(a: Decimal<N>, b: Decimal<NoInfer<N>>) {
 }
 
 export function abs<N extends Range>(n: Decimal<N>) {
-  return (n < 0n ? -n : n) as Decimal<N>;
+  return (n < BigInt(0) ? -n : n) as Decimal<N>;
 }
 
 export function avg<N extends Range>(a: Decimal<N>, b: Decimal<NoInfer<N>>) {
-  return div(add(a, b), dec(2n)) as Decimal<N>;
+  return div(add(a, b), dec(BigInt(2))) as Decimal<N>;
 }
 
 export function fromNumber<N extends Range>(n: number, decimals: N) {
@@ -157,9 +158,9 @@ export function toFixed<N>(
 ): string;
 export function toFixed(n: Decimal<Range | unknown>, decimals: number) {
   if (decimals === 0) return n.toString();
-  const one = 10n ** BigInt(decimals);
-  const absN = n < 0n ? -n : n;
-  const sign = n < 0n ? "-" : "";
+  const one = BigInt(10) ** BigInt(decimals);
+  const absN = n < BigInt(0) ? -n : n;
+  const sign = n < BigInt(0) ? "-" : "";
   const integer = (absN / one).toString();
   const fractional = (absN % one).toString().padStart(decimals, "0");
   return `${sign}${integer}.${fractional}`;

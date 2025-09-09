@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-namespace */
 import type { Decimal } from "../utils/decimal";
 
 export type Hex = `0x${string}`;

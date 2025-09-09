@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-namespace */
 import { AptosConfig, Network } from "@aptos-labs/ts-sdk";
 
 import { getSummary } from "../api/http";

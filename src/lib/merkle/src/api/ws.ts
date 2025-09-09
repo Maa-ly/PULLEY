@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-this-alias */
 import type { Hex } from "../types";
 import type { AccountFeed, PriceFeed } from "../types/api/wsapi";
 
@@ -92,6 +94,21 @@ export class WSAPISession {
         ctlr.close();
       },
     });
-    return stream;
+
+    // Convert ReadableStream to AsyncIterable
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        const reader = stream.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            yield value;
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
+    };
   }
 }

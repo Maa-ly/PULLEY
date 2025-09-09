@@ -29,7 +29,7 @@ const account = Account.fromPrivateKey({
 // get usdc balance
 
 const faucetPayload = merkle.payloads.testnetFaucetUSDC({
-  amount: 10_000_000n,
+  amount: BigInt(10_000_000),
 });
 const faucetTx = await sendTransaction(faucetPayload);
 console.log(`Successfully claimed testnet USDC (tx hash: ${faucetTx.hash})`);
@@ -45,7 +45,7 @@ const pairInfo = await merkle.getPairInfo({ pairId: "BTC_USD" });
 const pairState = await merkle.getPairState({ pairId: "BTC_USD" });
 
 // calculate collateral and size from pay size
-const paySize = dec<6>(5_000_000n);
+const paySize = dec<6>(BigInt(5_000_000));
 const { collateral, size } = calcEntryByPaySize(
   paySize,
   150,

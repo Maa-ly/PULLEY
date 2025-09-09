@@ -12,7 +12,8 @@ import {
 } from "../types/api";
 import { RawSummaryResponse } from "../types/api";
 import type { Order, PairInfo, PairState, Position } from "../types/trading";
-import { version as VERSION } from "../../../../../package.json";
+// import { version as VERSION } from "../../../../../package.json";
+const VERSION = "0.0.1";
 
 /**
  * @description Get summary

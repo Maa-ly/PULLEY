@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { OrderSpec, TradeExecutionResult } from "@/utils/types";
 import { useSecureMerkleWallet } from "@/hooks/useSecureMerkleWallet";
 

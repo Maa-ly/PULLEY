@@ -15,8 +15,8 @@ import type { Summary } from "../types/api";
 import { raise } from "../utils";
 import * as decimals from "../utils/decimal";
 
-export const PRICE_MAX = (2n ** 64n - 1n) as Decimals.Price;
-export const PRICE_MIN = 1n as Decimals.Price;
+export const PRICE_MAX = (BigInt(2) ** BigInt(64) - BigInt(1)) as Decimals.Price;
+export const PRICE_MIN = BigInt(1) as Decimals.Price;
 
 export function placeMarketOrder(args: {
   summary: Summary;

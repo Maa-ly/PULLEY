@@ -21,7 +21,7 @@ import {
   sub,
 } from "../utils/decimal";
 
-const DAY_SECONDS = 86400n as Decimal<0>;
+const DAY_SECONDS = BigInt(86400) as Decimal<0>;
 
 export const PRECISION = one(Decimals.PRECISION);
 const FUNDING_PRECISION = one(Decimals.FUNDING_PRECISION);
@@ -43,8 +43,8 @@ export const calcNewPrice = ({
   increaseOrder: Pick<Order, "sizeDelta">;
   price: Decimals.Price;
 }): Decimals.Price => {
-  if (size === 0n) return price;
-  if (sizeDelta === 0n) return avgPrice;
+  if (size === BigInt(0)) return price;
+  if (sizeDelta === BigInt(0)) return avgPrice;
   const padding = one(18);
   const newPrice = div(
     mul(add(size, sizeDelta), padding),
@@ -62,7 +62,7 @@ export const calcPnlWithoutFee = ({
   executePrice: Decimals.Price;
   decreaseOrder: Pick<Order, "sizeDelta">;
 }): Decimals.Collateral => {
-  if (avgPrice === executePrice) return dec(0n);
+  if (avgPrice === executePrice) return dec(BigInt(0));
   const priceGap = sub(executePrice, avgPrice);
   const pnl = div(
     mul(div(mul(priceGap, PRECISION), avgPrice), sizeDelta),
@@ -81,7 +81,7 @@ export const calcPriceImpact = ({
   pairState: { longOpenInterest, shortOpenInterest },
   idxPrice,
   order: { sizeDelta, isLong, isIncrease } = {
-    sizeDelta: dec(0n),
+    sizeDelta: dec(BigInt(0)),
     isLong: true,
     isIncrease: true,
   },
@@ -91,12 +91,12 @@ export const calcPriceImpact = ({
   idxPrice: Decimals.Price;
   order?: Pick<Order, "sizeDelta" | "isLong" | "isIncrease">;
 }): Decimals.Price => {
-  if (skewFactor === 0n) return idxPrice;
+  if (skewFactor === BigInt(0)) return idxPrice;
 
   const marketSkew = sub(longOpenInterest, shortOpenInterest);
   const price = add(idxPrice, div(mul(idxPrice, marketSkew), skewFactor));
 
-  if (sizeDelta === 0n) return price;
+  if (sizeDelta === BigInt(0)) return price;
 
   const newMarketSkew = add(
     marketSkew,
@@ -131,8 +131,8 @@ export const calcFundingRate = ({
 }): Decimals.FundingPrecision => {
   const marketSkew = sub(longOpenInterest, shortOpenInterest);
   const skewRate = min(
-    skewFactor === 0n
-      ? (0n as typeof FUNDING_PADDING_PRECISION)
+    skewFactor === BigInt(0)
+      ? (BigInt(0) as typeof FUNDING_PADDING_PRECISION)
       : div(mul(marketSkew, FUNDING_PADDING_PRECISION), skewFactor),
     FUNDING_PADDING_PRECISION,
   );
@@ -196,7 +196,7 @@ export const calcMakerTakerFee = ({
     mul(one(0, isLong === isIncrease), sizeDelta),
   );
   if (sign(marketSkew) === sign(nextMarketSkew)) {
-    const isTaker = (isLong === isIncrease) === marketSkew > 0n;
+    const isTaker = (isLong === isIncrease) === marketSkew > BigInt(0);
     return div(mul(sizeDelta, isTaker ? takerRate : makerRate), PRECISION);
   }
 

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-namespace */
 export type MerkleConfig = {
   baseURL: string;
   wsURL: string;

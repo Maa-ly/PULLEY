@@ -29,6 +29,6 @@ export async function getUsdcBalance(args: {
     },
   });
 
-  if (balances.length === 0) return decimals.dec<6>(0n);
+  if (balances.length === 0) return decimals.dec<6>(BigInt(0));
   return decimals.dec<6>(BigInt(balances[0].amount));
 }

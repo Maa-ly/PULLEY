@@ -50,7 +50,7 @@ export const calcPriceImpactInfo = ({
   const price = calcPriceImpact({ pairInfo, pairState, idxPrice, order });
   const priceImpact = sub(price, idxPrice);
   const priceImpactRatio =
-    idxPrice > 0n ? div(mul(priceImpact, PRECISION), idxPrice) : dec<6>(0n);
+    idxPrice > BigInt(0) ? div(mul(priceImpact, PRECISION), idxPrice) : dec<6>(BigInt(0));
   return { price, priceImpact, priceImpactRatio };
 };
 
@@ -232,11 +232,11 @@ export const calcEntryByPaySize = (
   size: Decimals.Collateral;
   fee: Decimals.Collateral;
 } => {
-  if (pay === 0n)
+  if (pay === BigInt(0))
     return {
-      collateral: dec<6>(0n),
-      size: dec<6>(0n),
-      fee: dec<6>(0n),
+      collateral: dec<6>(BigInt(0)),
+      size: dec<6>(BigInt(0)),
+      fee: dec<6>(BigInt(0)),
     };
   const estSizePay = mul(pay, fromNumber(leverage, 0));
   const estEntryFee = calcMakerTakerFee({
@@ -285,7 +285,7 @@ export const calcSlippagePrice = (
   slippageBps: Decimals.Bps, // 10000 = 100%, 0.5% = 50
 ): Decimals.Price => {
   const signed = (isIncrease: boolean, isLong: boolean) =>
-    isIncrease ? (isLong ? 1n : -1n) : isLong ? -1n : 1n;
+    isIncrease ? (isLong ? BigInt(1) : BigInt(-1)) : isLong ? BigInt(-1) : BigInt(1);
   const slippageFactor = dec<4>(
     one(4) + signed(isIncrease, isLong) * slippageBps,
   );

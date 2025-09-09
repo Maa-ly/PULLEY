@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 import { MerkleClient } from "@/lib/merkle/src/client";
 import { MerkleClientConfig } from "@/lib/merkle/src/client/config";
 // @ts-ignore

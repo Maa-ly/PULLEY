@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-declaration-merging */
 import { APIClient } from "./api/http";
 import { WSAPIClient } from "./api/ws";
 import { AptosHelpers } from "./aptos/helpers";

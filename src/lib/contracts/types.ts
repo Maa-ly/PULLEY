@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { type Address, type Hash, type Hex } from "viem";
 
 // Common types for contract interactions

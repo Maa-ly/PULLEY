@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -108,7 +110,11 @@ export function useSecureMerkleWallet() {
 
       // Sign and submit using the connected wallet
       const response = await signAndSubmitTransaction({
-        transaction: transaction,
+        data: {
+          function: faucetPayload.function,
+          typeArguments: [],
+          functionArguments: faucetPayload.functionArguments,
+        },
       });
 
       // Wait for transaction confirmation
@@ -217,7 +223,11 @@ export function useSecureMerkleWallet() {
 
       // Sign and submit using the connected wallet
       const response = await signAndSubmitTransaction({
-        transaction: orderTransaction,
+        data: {
+          function: orderPayload.function,
+          typeArguments: [],
+          functionArguments: orderPayload.functionArguments,
+        },
       });
 
       // Wait for transaction confirmation

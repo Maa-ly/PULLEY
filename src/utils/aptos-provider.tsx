@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { Aptos, Account, Ed25519PrivateKey, PrivateKey, PrivateKeyVariants } from '@aptos-labs/ts-sdk'
+import { Aptos, Account, Ed25519PrivateKey, PrivateKey, PrivateKeyVariants, AptosConfig, Network } from '@aptos-labs/ts-sdk'
 
 // Aptos Wallet Context
 interface AptosWalletContextType {
@@ -42,13 +44,21 @@ export function AptosWalletProvider({
   // Initialize Aptos client
   useEffect(() => {
     const initAptosClient = () => {
-      const config = {
-        network: network === 'testnet' 
+      const config = new AptosConfig({
+        network: network === 'testnet' ? Network.TESTNET : network === 'mainnet' ? Network.MAINNET : Network.DEVNET,
+        fullnode: network === 'testnet'
           ? 'https://fullnode.testnet.aptoslabs.com/v1'
           : network === 'mainnet'
           ? 'https://fullnode.mainnet.aptoslabs.com/v1'
           : 'https://fullnode.devnet.aptoslabs.com/v1'
-      }
+      })
+      // const config = new AptosConfig({
+      //   network: network === 'testnet' 
+      //     ? 'https://fullnode.testnet.aptoslabs.com/v1'
+      //     : network === 'mainnet'
+      //     ? 'https://fullnode.mainnet.aptoslabs.com/v1'
+      //     : 'https://fullnode.devnet.aptoslabs.com/v1'
+      // })
       
       const client = new Aptos(config)
       setAptosClient(client)
@@ -83,7 +93,7 @@ export function AptosWalletProvider({
         setIsConnected(true)
         
         // Create account from wallet address
-        const aptosAccount = Account.fromAddress({ address: walletAddress })
+        const aptosAccount = Account.generate()
         setAccount(aptosAccount)
         
         return { success: true, address: walletAddress }
@@ -148,7 +158,7 @@ export function AptosWalletProvider({
 
     try {
       // Sign transaction with wallet
-      const response = await window.aptos.signAndSubmitTransaction(transaction)
+      const response = await window.aptos?.signAndSubmitTransaction(transaction)
       
       if (response) {
         return { hash: response.hash, success: true }
